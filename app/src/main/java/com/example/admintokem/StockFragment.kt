@@ -5,28 +5,25 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.fragment.app.activityViewModels
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
-// TODO: Rename parameter arguments, choose names that match
-// the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
-private const val ARG_PARAM1 = "param1"
-private const val ARG_PARAM2 = "param2"
 
-/**
- * A simple [Fragment] subclass.
- * Use the [StockFragment.newInstance] factory method to
- * create an instance of this fragment.
- */
 class StockFragment : Fragment() {
-    // TODO: Rename and change types of parameters
-    private var param1: String? = null
-    private var param2: String? = null
+    private lateinit var recylerStock: RecyclerView
+    private lateinit var firestore: FirebaseFirestore
+    private val stockViewModel: StockViewModel by activityViewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        arguments?.let {
-            param1 = it.getString(ARG_PARAM1)
-            param2 = it.getString(ARG_PARAM2)
-        }
+
     }
 
     override fun onCreateView(
@@ -37,23 +34,41 @@ class StockFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_stock, container, false)
     }
 
-    companion object {
-        /**
-         * Use this factory method to create a new instance of
-         * this fragment using the provided parameters.
-         *
-         * @param param1 Parameter 1.
-         * @param param2 Parameter 2.
-         * @return A new instance of fragment StockFragment.
-         */
-        // TODO: Rename and change types and number of parameters
-        @JvmStatic
-        fun newInstance(param1: String, param2: String) =
-            StockFragment().apply {
-                arguments = Bundle().apply {
-                    putString(ARG_PARAM1, param1)
-                    putString(ARG_PARAM2, param2)
-                }
-            }
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        recylerStock = view.findViewById(R.id.recyclerStock)
+        firestore = FirebaseFirestore.getInstance()
+
+        GlobalScope.launch { getDataFromFirestore() }
+
+        stockViewModel.listStock.observe(viewLifecycleOwner) {neValue ->
+            recylerStock.layoutManager = LinearLayoutManager(requireContext())
+            recylerStock.adapter = AdapterStock(neValue,requireContext(),stockViewModel,firestore,viewLifecycleOwner)
+        }
+
     }
+
+    suspend fun getDataFromFirestore(){
+        val database = firestore.collection("bunga").get().await()
+        withContext(Dispatchers.IO){
+            database?.let {document ->
+                val listKembang = document.map { doc ->
+                    StockModel(
+                        doc.id,
+                        doc.getString("Nama_bunga")?: "",
+                        doc.getString("Gambar")?:"",
+                        (doc["Stok"] as? Number)?.toInt()?:0,
+                        (doc["Harga"] as? Number)?.toInt()?: 0,
+
+                    )
+                }
+
+                stockViewModel._listStock.postValue(listKembang.toMutableList())
+
+
+            }
+        }
+    }
+
+
 }
